@@ -4,12 +4,12 @@
  *  the most obvious difference being the different file you need to include:
  */
 
+#define RXD2 16
+#define TXD2 17
 
-
-
-#include "FS.h"
-#include "SD.h"
-#include "SPI.h"
+#include <FS.h>
+#include <SD.h>
+#include <SPI.h>
 #include <SPIFFS.h>
 
 #include <WebServer.h>
@@ -42,11 +42,13 @@ File root, file;
 void setup(){
     Serial.begin(115200);
     EEPROM.begin(EEPROM_SIZE);
-    
-    
-   // clearEEPROM();
+    Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+
+    //clearEEPROM();
     
     SPIFFS.begin();
+    
+
     
     // Set WiFi to station mode and disconnect from an AP if it was previously connected
     WiFi.mode(WIFI_STA);
@@ -70,9 +72,10 @@ void setup(){
     if(savedSSID==""){
       networks = scanNetwork();
       Serial.println(networks);
+      Serial2.println(networks);
       while(true){
-        if(Serial.available() > 0){
-          String incomingString = Serial.readString();
+        if(Serial2.available() > 0){
+          String incomingString = Serial2.readString();
           incomingString.trim();
           line = getValue(networks, '\n', (incomingString.toInt()-1));
           ssid = midString(line, ": ", " (");
@@ -81,10 +84,10 @@ void setup(){
             Serial.print(ssid);
             Serial.println(":");
             while(true){
-              if(Serial.available() > 0){
-                  String incomingString = Serial.readString();
+              if(Serial2.available() > 0){
+                  String incomingString = Serial2.readString();
                   incomingString.trim();
-                  Serial.println(incomingString);
+                  Serial2.println(incomingString);
                   String conn = wifiConnect((char *) ssid.c_str(), (char *) incomingString.c_str());
                   if(conn=="1"){
                     Serial.println("Connected");
@@ -115,10 +118,12 @@ void setup(){
       String password = getValue(savedSSID, '|', 1);
       String conn = wifiConnect((char *) ssid.c_str(), (char *) password.c_str());
       if(conn=="1"){
+        Serial2.println(WiFi.localIP());
         Serial.println(WiFi.localIP());
+        
         if(!SD.begin(5)){
           Serial.println("Card Mount Failed");
-          return;
+          //return;
         }else{
           Serial.println("Card Mounted");
         }
@@ -126,7 +131,7 @@ void setup(){
       
         if(cardType == CARD_NONE){
           Serial.println("No SD card attached");
-          return;
+          //return;
         }else{
           Serial.println("SD card attached");
         }
@@ -159,6 +164,10 @@ void setup(){
             }
           } 
           if(upload.status == UPLOAD_FILE_WRITE){
+            //Serial2.println("M22");
+            //Serial.println("STM32 Yeniden başlatıldı");
+            delay(100);
+            
             if(root.write(upload.buf, upload.currentSize) != upload.currentSize){
               Serial.println("- failed to write");
               return;
@@ -340,7 +349,7 @@ void setup(){
 
       
 
-      /*server.on("/bootstrap-input-spinner.js", []() {
+      server.on("/bootstrap-input-spinner.js", []() {
             File f = SPIFFS.open("/js/bootstrap-input-spinner.js", "r");
             server.streamFile(f, "text/javascript");
             int filesize = f.size();
@@ -362,7 +371,7 @@ void setup(){
               siz -= len; 
               f.close();
             } 
-      });*/
+      });
       
       server.on("/jquery.min.js", []() {
             File f = SPIFFS.open("/js/jquery.min.js", "r");
@@ -400,6 +409,7 @@ void sendCommand()
 {
  String cmd = server.arg("cmd");
  Serial.println(cmd);
+ Serial2.println(cmd);
  server.send(200, "text/plain", "1");
 }
 
@@ -408,6 +418,7 @@ void file_delete()
  
  String act_state = server.arg("fileName");
  Serial.println(act_state);
+ Serial2.println(act_state);
  deleteFile(SD, server.arg("fileName").c_str());
  server.send(200, "text/plain", "1");
 }
@@ -416,6 +427,7 @@ void file_read()
 {
    String act_state = server.arg("fileName");
    Serial.println(act_state);
+   Serial2.println(act_state);
    String result = readFile(SD, server.arg("fileName").c_str());
    server.send(200, "text/plain", result);
 }
@@ -511,14 +523,13 @@ String readStringEEPROM(char add)
     return String(data);
 }
 
-
-
 void loop()
 {
     if (Serial.available() > 0) {
       // read the incoming string:
       String incomingString = Serial.readString();
       Serial.print(incomingString);
+      Serial2.print(incomingString);
       incomingString.trim();
       if(incomingString=="N" || incomingString=="n"){
         Serial.println(scanNetwork());
@@ -553,6 +564,7 @@ String wifiConnect(char* ssid, char* password){
       delay(500);
       Serial.println("Connecting to WiFi..");
       
+      
       if(trial==20){
         break;
       }else{
@@ -561,6 +573,8 @@ String wifiConnect(char* ssid, char* password){
     }
 
     if(WiFi.status() == WL_CONNECTED){
+      Serial2.println("M22");
+      Serial.println("STM32 Yeniden Başlatıldı");
       conn = "1"; 
     }else{
       conn = "0";
@@ -585,6 +599,7 @@ String scanNetwork(){
         Serial.println(" networks found");
         for (int i = 0; i < n; ++i) {
             // Print SSID and RSSI for each network found
+            returnvalue += "M118 ";
             returnvalue += String(i + 1);
             returnvalue += ": ";
             returnvalue += WiFi.SSID(i);
@@ -717,6 +732,7 @@ String readFile(fs::FS &fs, const char * path){
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
   Serial.printf("Writing file: %s\n", path);
+
 
   File file = fs.open(path, FILE_WRITE);
   if(!file){
